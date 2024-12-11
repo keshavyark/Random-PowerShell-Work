@@ -1,14 +1,73 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+# Ensure Execution Policy Allows Script Execution
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 
+# Functions to Retrieve Server Information
+function Get-SystemInfo {
+    param ($Server)
+
+    $systemInfo = @{}
+    try {
+        $osInfo = Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Server
+        $biosInfo = Get-WmiObject -Class Win32_BIOS -ComputerName $Server
+        $csInfo = Get-WmiObject -Class Win32_ComputerSystem -ComputerName $Server
+        $cpuInfo = Get-WmiObject -Class Win32_Processor -ComputerName $Server
+
+        $systemInfo["OS Name"] = $osInfo.Caption
+        $systemInfo["Version"] = $osInfo.Version
+        $systemInfo["Manufacturer"] = $osInfo.Manufacturer
+        $systemInfo["Configuration"] = $osInfo.CSName
+        $systemInfo["Build Type"] = $osInfo.BuildType
+        $systemInfo["Registered Owner"] = $osInfo.RegisteredUser
+        $systemInfo["Registered Organization"] = $osInfo.Organization
+        $systemInfo["Product ID"] = $osInfo.SerialNumber
+        $systemInfo["Original Install Date"] = $osInfo.InstallDate
+        $systemInfo["System Boot Time"] = $osInfo.LastBootUpTime
+        $systemInfo["System Manufacturer"] = $csInfo.Manufacturer
+        $systemInfo["System Model"] = $csInfo.Model
+        $systemInfo["System Type"] = $osInfo.OSArchitecture
+        $systemInfo["Processor(s)"] = ($cpuInfo.Name | Out-String).Trim()
+        $systemInfo["BIOS Version"] = $biosInfo.SMBIOSBIOSVersion
+        $systemInfo["Windows Directory"] = $osInfo.WindowsDirectory
+        $systemInfo["System Directory"] = $osInfo.SystemDirectory
+        $systemInfo["Boot Device"] = $osInfo.BootDevice
+        $systemInfo["System Locale"] = $osInfo.MUILanguages -join ", "
+        $systemInfo["Input Locale"] = $osInfo.Locale
+        $systemInfo["Time Zone"] = $osInfo.CurrentTimeZone
+        $systemInfo["Total Physical Memory"] = [math]::Round($csInfo.TotalPhysicalMemory / 1GB, 2).ToString() + " GB"
+        $systemInfo["Available Physical Memory"] = [math]::Round($osInfo.FreePhysicalMemory / 1MB, 2).ToString() + " GB"
+        $systemInfo["Virtual Memory: Max Size"] = [math]::Round($osInfo.TotalVirtualMemorySize / 1MB, 2).ToString() + " GB"
+        $systemInfo["Virtual Memory: Available"] = [math]::Round($osInfo.FreeVirtualMemory / 1MB, 2).ToString() + " GB"
+    } catch {
+        Write-Warning "Error retrieving system info for ${Server}: $($_.Exception.Message)"
+    }
+
+    $systemInfo
+}
+
+function Get-DiskInfo {
+    param ($Server)
+    Get-WmiObject -Class Win32_LogicalDisk -ComputerName $Server -Filter "DriveType=3" |
+    Select-Object DeviceID, @{Name="FreeSpace(GB)"; Expression={[math]::Round($_.FreeSpace/1GB, 2)}}, 
+                  @{Name="TotalSpace(GB)"; Expression={[math]::Round($_.Size/1GB, 2)}}
+}
+
+function Get-NetworkInfo {
+    param ($Server)
+    Get-WmiObject -Class Win32_NetworkAdapterConfiguration -ComputerName $Server -Filter "IPEnabled=True" |
+    Select-Object Description, IPAddress, MACAddress, DefaultIPGateway, DNSDomain, @{Name="Status"; Expression={if ($_.IPEnabled) {"Enabled"} else {"Disabled"}}}
+}
+
+# Initialize Form
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Remote Server Information Tool"
-$form.Size = New-Object System.Drawing.Size(700, 500)
+$form.Size = New-Object System.Drawing.Size(800, 600)
 $form.StartPosition = "CenterScreen"
 $form.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
 
-
+# Title Label
 $titleLabel = New-Object System.Windows.Forms.Label
 $titleLabel.Text = "Remote Server Management"
 $titleLabel.Font = New-Object System.Drawing.Font("Arial", 14, [System.Drawing.FontStyle]::Bold)
@@ -16,51 +75,39 @@ $titleLabel.AutoSize = $true
 $titleLabel.Location = New-Object System.Drawing.Point(20, 10)
 $form.Controls.Add($titleLabel)
 
-
-$singleGroup = New-Object System.Windows.Forms.GroupBox
-$singleGroup.Text = "Single Server Management"
-$singleGroup.Size = New-Object System.Drawing.Size(640, 100)
-$singleGroup.Location = New-Object System.Drawing.Point(20, 50)
-$form.Controls.Add($singleGroup)
-
+# Single Server Input
 $serverLabel = New-Object System.Windows.Forms.Label
 $serverLabel.Text = "Server Name/IP:"
-$serverLabel.Location = New-Object System.Drawing.Point(20, 30)
+$serverLabel.Location = New-Object System.Drawing.Point(20, 50)
 $serverLabel.AutoSize = $true
-$singleGroup.Controls.Add($serverLabel)
+$form.Controls.Add($serverLabel)
 
 $serverInput = New-Object System.Windows.Forms.TextBox
-$serverInput.Location = New-Object System.Drawing.Point(120, 28)
-$serverInput.Width = 400
-$singleGroup.Controls.Add($serverInput)
+$serverInput.Location = New-Object System.Drawing.Point(150, 48)
+$serverInput.Width = 500
+$form.Controls.Add($serverInput)
 
 $executeButton = New-Object System.Windows.Forms.Button
 $executeButton.Text = "Get Info"
-$executeButton.Location = New-Object System.Drawing.Point(530, 26)
+$executeButton.Location = New-Object System.Drawing.Point(670, 46)
 $executeButton.Size = New-Object System.Drawing.Size(75, 25)
-$singleGroup.Controls.Add($executeButton)
+$form.Controls.Add($executeButton)
 
-
-$multiGroup = New-Object System.Windows.Forms.GroupBox
-$multiGroup.Text = "Multiple Servers Management"
-$multiGroup.Size = New-Object System.Drawing.Size(640, 100)
-$multiGroup.Location = New-Object System.Drawing.Point(20, 160)
-$form.Controls.Add($multiGroup)
-
+# Multiple Server Input
 $fileLabel = New-Object System.Windows.Forms.Label
 $fileLabel.Text = "Upload Server List (txt):"
-$fileLabel.Location = New-Object System.Drawing.Point(20, 30)
+$fileLabel.Location = New-Object System.Drawing.Point(20, 90)
 $fileLabel.AutoSize = $true
-$multiGroup.Controls.Add($fileLabel)
+$form.Controls.Add($fileLabel)
 
 $fileInput = New-Object System.Windows.Forms.TextBox
-$fileInput.Location = New-Object System.Drawing.Point(180, 28)
-$fileInput.Width = 300
-$multiGroup.Controls.Add($fileInput)
+$fileInput.Location = New-Object System.Drawing.Point(200, 88)
+$fileInput.Width = 400
+$form.Controls.Add($fileInput)
 
 $fileBrowse = New-Object System.Windows.Forms.Button
 $fileBrowse.Text = "Browse"
-$fileBrowse.Location = New-Object System.Drawing.Point(490, 26)
+$fileBrowse.Location = New-Object System.Drawing.Point(610, 86)
 $fileBrowse.Size = New-Object System.Drawing.Size(75, 25)
 $fileBrowse.Add_Click({
     $openFileDialog = New-Object System.Windows.Forms.OpenFileDialog
@@ -69,81 +116,70 @@ $fileBrowse.Add_Click({
         $fileInput.Text = $openFileDialog.FileName
     }
 })
-$multiGroup.Controls.Add($fileBrowse)
+$form.Controls.Add($fileBrowse)
 
 $executeMultiButton = New-Object System.Windows.Forms.Button
 $executeMultiButton.Text = "Get Info"
-$executeMultiButton.Location = New-Object System.Drawing.Point(570, 26)
+$executeMultiButton.Location = New-Object System.Drawing.Point(700, 86)
 $executeMultiButton.Size = New-Object System.Drawing.Size(75, 25)
-$multiGroup.Controls.Add($executeMultiButton)
+$form.Controls.Add($executeMultiButton)
 
-
+# Results Section
 $resultsLabel = New-Object System.Windows.Forms.Label
 $resultsLabel.Text = "Results:"
 $resultsLabel.Font = New-Object System.Drawing.Font("Arial", 10, [System.Drawing.FontStyle]::Bold)
-$resultsLabel.Location = New-Object System.Drawing.Point(20, 270)
+$resultsLabel.Location = New-Object System.Drawing.Point(20, 130)
 $resultsLabel.AutoSize = $true
 $form.Controls.Add($resultsLabel)
 
 $resultsBox = New-Object System.Windows.Forms.TextBox
 $resultsBox.Multiline = $true
 $resultsBox.ScrollBars = "Vertical"
-$resultsBox.Location = New-Object System.Drawing.Point(20, 300)
-$resultsBox.Size = New-Object System.Drawing.Size(640, 150)
+$resultsBox.Location = New-Object System.Drawing.Point(20, 160)
+$resultsBox.Size = New-Object System.Drawing.Size(750, 380)
 $form.Controls.Add($resultsBox)
 
-
-$icon = [System.Drawing.SystemIcons]::Information.ToBitmap()
-$iconBox = New-Object System.Windows.Forms.PictureBox
-$iconBox.Image = $icon
-$iconBox.SizeMode = "StretchImage"
-$iconBox.Size = New-Object System.Drawing.Size(40, 40)
-$iconBox.Location = New-Object System.Drawing.Point(640, 10)
-$form.Controls.Add($iconBox)
-
+# Fetch Information for a Single Server
 $executeButton.Add_Click({
     $server = $serverInput.Text
     if ([string]::IsNullOrWhiteSpace($server)) {
         [System.Windows.Forms.MessageBox]::Show("Please enter a server name or IP.")
         return
     }
-    $resultsBox.Text = "Fetching information for $server..."
+    $resultsBox.Clear()
     try {
-        $info = Invoke-Command -ComputerName $server -ScriptBlock {
-            @{
-                'System Info' = Get-ComputerInfo
-                'Disk Info'   = Get-PSDrive -PSProvider FileSystem
-                'Network Info' = Get-NetIPAddress
-            }
-        }
-        $resultsBox.Text = ($info | Out-String)
+        $systemInfo = Get-SystemInfo -Server $server | Format-Table -AutoSize | Out-String
+        $diskInfo = Get-DiskInfo -Server $server | Format-Table -AutoSize | Out-String
+        $networkInfo = Get-NetworkInfo -Server $server | Format-Table -AutoSize | Out-String
+        $resultsBox.AppendText("System Information:`n$systemInfo`n")
+        $resultsBox.AppendText("Disk Information:`n$diskInfo`n")
+        $resultsBox.AppendText("Network Information:`n$networkInfo`n")
     } catch {
-        $resultsBox.Text = "Error: $_"
+        $resultsBox.AppendText("Error retrieving information for ${server}: ${_}`n")
     }
 })
 
+# Fetch Information for Multiple Servers
 $executeMultiButton.Add_Click({
-    $filePath = $fileInput.Text
-    if (-not (Test-Path $filePath)) {
-        [System.Windows.Forms.MessageBox]::Show("Please select a valid server list file.")
+    $file = $fileInput.Text
+    if ([string]::IsNullOrWhiteSpace($file)) {
+        [System.Windows.Forms.MessageBox]::Show("Please upload a file with server list.")
         return
     }
-    $servers = Get-Content $filePath
-    $resultsBox.Text = "Fetching information for servers..."
-    foreach ($server in $servers) {
-        try {
-            $info = Invoke-Command -ComputerName $server -ScriptBlock {
-                @{
-                    'System Info' = Get-ComputerInfo
-                    'Disk Info'   = Get-PSDrive -PSProvider FileSystem
-                    'Network Info' = Get-NetIPAddress
-                }
+    $resultsBox.Clear()
+    try {
+        $servers = Get-Content -Path $file
+        foreach ($server in $servers) {
+            $systemInfo = Get-SystemInfo -Server $server
+            $resultsBox.AppendText("System Information for ${server}:`n")
+            foreach ($key in $systemInfo.Keys) {
+                $resultsBox.AppendText("${key}: ${($systemInfo[$key])}`n")
             }
-            $resultsBox.AppendText("Results for ${server}`n" + ($info | Out-String) + "`n")
-        } catch {
-            $resultsBox.AppendText("Error for ${server}: $_`n")
         }
+    } catch {
+        $resultsBox.AppendText("Error retrieving information from file: $($_.Exception.Message)`n")
     }
 })
 
+# Run Form
 [void] $form.ShowDialog()
