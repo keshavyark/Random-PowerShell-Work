@@ -1,0 +1,149 @@
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+
+$form = New-Object System.Windows.Forms.Form
+$form.Text = "Remote Server Information Tool"
+$form.Size = New-Object System.Drawing.Size(700, 500)
+$form.StartPosition = "CenterScreen"
+$form.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
+
+
+$titleLabel = New-Object System.Windows.Forms.Label
+$titleLabel.Text = "Remote Server Management"
+$titleLabel.Font = New-Object System.Drawing.Font("Arial", 14, [System.Drawing.FontStyle]::Bold)
+$titleLabel.AutoSize = $true
+$titleLabel.Location = New-Object System.Drawing.Point(20, 10)
+$form.Controls.Add($titleLabel)
+
+
+$singleGroup = New-Object System.Windows.Forms.GroupBox
+$singleGroup.Text = "Single Server Management"
+$singleGroup.Size = New-Object System.Drawing.Size(640, 100)
+$singleGroup.Location = New-Object System.Drawing.Point(20, 50)
+$form.Controls.Add($singleGroup)
+
+$serverLabel = New-Object System.Windows.Forms.Label
+$serverLabel.Text = "Server Name/IP:"
+$serverLabel.Location = New-Object System.Drawing.Point(20, 30)
+$serverLabel.AutoSize = $true
+$singleGroup.Controls.Add($serverLabel)
+
+$serverInput = New-Object System.Windows.Forms.TextBox
+$serverInput.Location = New-Object System.Drawing.Point(120, 28)
+$serverInput.Width = 400
+$singleGroup.Controls.Add($serverInput)
+
+$executeButton = New-Object System.Windows.Forms.Button
+$executeButton.Text = "Get Info"
+$executeButton.Location = New-Object System.Drawing.Point(530, 26)
+$executeButton.Size = New-Object System.Drawing.Size(75, 25)
+$singleGroup.Controls.Add($executeButton)
+
+
+$multiGroup = New-Object System.Windows.Forms.GroupBox
+$multiGroup.Text = "Multiple Servers Management"
+$multiGroup.Size = New-Object System.Drawing.Size(640, 100)
+$multiGroup.Location = New-Object System.Drawing.Point(20, 160)
+$form.Controls.Add($multiGroup)
+
+$fileLabel = New-Object System.Windows.Forms.Label
+$fileLabel.Text = "Upload Server List (txt):"
+$fileLabel.Location = New-Object System.Drawing.Point(20, 30)
+$fileLabel.AutoSize = $true
+$multiGroup.Controls.Add($fileLabel)
+
+$fileInput = New-Object System.Windows.Forms.TextBox
+$fileInput.Location = New-Object System.Drawing.Point(180, 28)
+$fileInput.Width = 300
+$multiGroup.Controls.Add($fileInput)
+
+$fileBrowse = New-Object System.Windows.Forms.Button
+$fileBrowse.Text = "Browse"
+$fileBrowse.Location = New-Object System.Drawing.Point(490, 26)
+$fileBrowse.Size = New-Object System.Drawing.Size(75, 25)
+$fileBrowse.Add_Click({
+    $openFileDialog = New-Object System.Windows.Forms.OpenFileDialog
+    $openFileDialog.Filter = "Text files (*.txt)|*.txt"
+    if ($openFileDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        $fileInput.Text = $openFileDialog.FileName
+    }
+})
+$multiGroup.Controls.Add($fileBrowse)
+
+$executeMultiButton = New-Object System.Windows.Forms.Button
+$executeMultiButton.Text = "Get Info"
+$executeMultiButton.Location = New-Object System.Drawing.Point(570, 26)
+$executeMultiButton.Size = New-Object System.Drawing.Size(75, 25)
+$multiGroup.Controls.Add($executeMultiButton)
+
+
+$resultsLabel = New-Object System.Windows.Forms.Label
+$resultsLabel.Text = "Results:"
+$resultsLabel.Font = New-Object System.Drawing.Font("Arial", 10, [System.Drawing.FontStyle]::Bold)
+$resultsLabel.Location = New-Object System.Drawing.Point(20, 270)
+$resultsLabel.AutoSize = $true
+$form.Controls.Add($resultsLabel)
+
+$resultsBox = New-Object System.Windows.Forms.TextBox
+$resultsBox.Multiline = $true
+$resultsBox.ScrollBars = "Vertical"
+$resultsBox.Location = New-Object System.Drawing.Point(20, 300)
+$resultsBox.Size = New-Object System.Drawing.Size(640, 150)
+$form.Controls.Add($resultsBox)
+
+
+$icon = [System.Drawing.SystemIcons]::Information.ToBitmap()
+$iconBox = New-Object System.Windows.Forms.PictureBox
+$iconBox.Image = $icon
+$iconBox.SizeMode = "StretchImage"
+$iconBox.Size = New-Object System.Drawing.Size(40, 40)
+$iconBox.Location = New-Object System.Drawing.Point(640, 10)
+$form.Controls.Add($iconBox)
+
+$executeButton.Add_Click({
+    $server = $serverInput.Text
+    if ([string]::IsNullOrWhiteSpace($server)) {
+        [System.Windows.Forms.MessageBox]::Show("Please enter a server name or IP.")
+        return
+    }
+    $resultsBox.Text = "Fetching information for $server..."
+    try {
+        $info = Invoke-Command -ComputerName $server -ScriptBlock {
+            @{
+                'System Info' = Get-ComputerInfo
+                'Disk Info'   = Get-PSDrive -PSProvider FileSystem
+                'Network Info' = Get-NetIPAddress
+            }
+        }
+        $resultsBox.Text = ($info | Out-String)
+    } catch {
+        $resultsBox.Text = "Error: $_"
+    }
+})
+
+$executeMultiButton.Add_Click({
+    $filePath = $fileInput.Text
+    if (-not (Test-Path $filePath)) {
+        [System.Windows.Forms.MessageBox]::Show("Please select a valid server list file.")
+        return
+    }
+    $servers = Get-Content $filePath
+    $resultsBox.Text = "Fetching information for servers..."
+    foreach ($server in $servers) {
+        try {
+            $info = Invoke-Command -ComputerName $server -ScriptBlock {
+                @{
+                    'System Info' = Get-ComputerInfo
+                    'Disk Info'   = Get-PSDrive -PSProvider FileSystem
+                    'Network Info' = Get-NetIPAddress
+                }
+            }
+            $resultsBox.AppendText("Results for ${server}`n" + ($info | Out-String) + "`n")
+        } catch {
+            $resultsBox.AppendText("Error for ${server}: $_`n")
+        }
+    }
+})
+
+[void] $form.ShowDialog()
