@@ -1,10 +1,8 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# Ensure Execution Policy Allows Script Execution
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 
-# Functions to Retrieve Server Information
 function Get-SystemInfo {
     param ($Server)
 
@@ -60,14 +58,12 @@ function Get-NetworkInfo {
     Select-Object Description, IPAddress, MACAddress, DefaultIPGateway, DNSDomain, @{Name="Status"; Expression={if ($_.IPEnabled) {"Enabled"} else {"Disabled"}}}
 }
 
-# Initialize Form
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Remote Server Information Tool"
 $form.Size = New-Object System.Drawing.Size(800, 600)
 $form.StartPosition = "CenterScreen"
 $form.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
 
-# Title Label
 $titleLabel = New-Object System.Windows.Forms.Label
 $titleLabel.Text = "Remote Server Management"
 $titleLabel.Font = New-Object System.Drawing.Font("Arial", 14, [System.Drawing.FontStyle]::Bold)
@@ -75,7 +71,6 @@ $titleLabel.AutoSize = $true
 $titleLabel.Location = New-Object System.Drawing.Point(20, 10)
 $form.Controls.Add($titleLabel)
 
-# Single Server Input
 $serverLabel = New-Object System.Windows.Forms.Label
 $serverLabel.Text = "Server Name/IP:"
 $serverLabel.Location = New-Object System.Drawing.Point(20, 50)
@@ -93,7 +88,6 @@ $executeButton.Location = New-Object System.Drawing.Point(670, 46)
 $executeButton.Size = New-Object System.Drawing.Size(75, 25)
 $form.Controls.Add($executeButton)
 
-# Multiple Server Input
 $fileLabel = New-Object System.Windows.Forms.Label
 $fileLabel.Text = "Upload Server List (txt):"
 $fileLabel.Location = New-Object System.Drawing.Point(20, 90)
@@ -124,7 +118,6 @@ $executeMultiButton.Location = New-Object System.Drawing.Point(700, 86)
 $executeMultiButton.Size = New-Object System.Drawing.Size(75, 25)
 $form.Controls.Add($executeMultiButton)
 
-# Results Section
 $resultsLabel = New-Object System.Windows.Forms.Label
 $resultsLabel.Text = "Results:"
 $resultsLabel.Font = New-Object System.Drawing.Font("Arial", 10, [System.Drawing.FontStyle]::Bold)
@@ -139,7 +132,6 @@ $resultsBox.Location = New-Object System.Drawing.Point(20, 160)
 $resultsBox.Size = New-Object System.Drawing.Size(750, 380)
 $form.Controls.Add($resultsBox)
 
-# Fetch Information for a Single Server
 $executeButton.Add_Click({
     $server = $serverInput.Text
     if ([string]::IsNullOrWhiteSpace($server)) {
@@ -159,7 +151,6 @@ $executeButton.Add_Click({
     }
 })
 
-# Fetch Information for Multiple Servers
 $executeMultiButton.Add_Click({
     $file = $fileInput.Text
     if ([string]::IsNullOrWhiteSpace($file)) {
@@ -181,5 +172,4 @@ $executeMultiButton.Add_Click({
     }
 })
 
-# Run Form
 [void] $form.ShowDialog()
